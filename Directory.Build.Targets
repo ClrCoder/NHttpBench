@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <PathMap>$(TargetDir)=C:\bin\,$(ProjectDir)=C:\src\,$(SolutionDir)=C:\ClrPro\</PathMap>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' Or '$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="1.1.1" />
+    <PackageReference Include="Nullable" Version="1.2.1" />
+  </ItemGroup>
+
+</Project>
