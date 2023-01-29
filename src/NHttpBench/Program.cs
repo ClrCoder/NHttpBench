@@ -11,16 +11,21 @@ namespace NHttpBench
     {
         private static void Main(string[] args)
         {
-            ThreadPool.SetMaxThreads(100, 50);
             Parser.Default.ParseArguments<Options>(args).WithParsed(
                 o =>
                 {
-
-                    Console.WriteLine($"HTTP KeepAlive = {o.KeepAlive}");
-
+                    string protocolVersionString = o.ProtocolVersion ?? "1.1";
+                    var protocolVersion = Version.Parse(protocolVersionString);
+                    Console.WriteLine($"KeepAlive = {o.KeepAlive}; HTTP {protocolVersionString}");
                     CancellationTokenSource cts = new CancellationTokenSource();
                     var cancellationToken = cts.Token;
-                    using (var benchOperation = new NHttpBenchOperation(o.Uri, o.Connections, o.Requests, o.KeepAlive))
+                    using (var benchOperation = new NHttpBenchOperation(
+                        o.Uri,
+                        o.Connections,
+                        o.Tasks,
+                        o.Requests,
+                        o.KeepAlive,
+                        protocolVersion))
                     {
                         var task = benchOperation.Run(cancellationToken);
 
@@ -29,7 +34,8 @@ namespace NHttpBench
                         {
                             Thread.Sleep(1000);
                             processedRequests = benchOperation.GetProcessedRequests();
-                            Console.WriteLine($"Processed requests: {processedRequests.Length}");
+                            Console.WriteLine(
+                                $"Processed requests: {processedRequests.Length};   Active Requests: {benchOperation.ActiveWorkItems}");
                             if (task.IsCompleted)
                             {
                                 break;
@@ -69,6 +75,9 @@ namespace NHttpBench
             [Option('c', "connections", Required = true, HelpText = "Number of concurrent connections.")]
             public int Connections { get; set; }
 
+            [Option('t', "tasks", Required = true, HelpText = "Number of concurrent tasks connections.")]
+            public int Tasks { get; set; }
+
             [Option('n', "num-requests", Required = true, HelpText = "Number of requests.")]
             public int Requests { get; set; }
 
@@ -77,6 +86,9 @@ namespace NHttpBench
 
             [Option('k', "keep-alive", Required = false, HelpText = "Use keep alive mode")]
             public bool KeepAlive { get; set; }
+
+            [Option('p', "protocol-version", Required = false, HelpText = "Protocol Version 1.0, 1.1 or 2.0")]
+            public string? ProtocolVersion { get; set; }
         }
     }
 }

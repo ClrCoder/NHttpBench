@@ -8,6 +8,7 @@ namespace NHttpBench
     using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Linq;
+    using System.Net;
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
@@ -17,30 +18,58 @@ namespace NHttpBench
     {
         private readonly string _uri;
         private readonly bool _keepAlive;
+        private readonly Version _protocolVersion;
         private readonly List<HttpClient> _httpClients = new List<HttpClient>();
         private readonly BenchWorkItem[] _workItems;
 
         private int _nextWorkItemToProcess;
         private readonly Stopwatch _stopwatch;
         private int _processedItems;
+        private int _activeWorkItems;
 
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Reviewed")]
-        public NHttpBenchOperation(string uri, int connectionsCount, int requestsCount, bool keepAlive)
+        public NHttpBenchOperation(
+            string uri,
+            int connectionsCount,
+            int tasksCount,
+            int requestsCount,
+            bool keepAlive,
+            Version protocolVersion)
         {
+            ServicePointManager.DefaultConnectionLimit = connectionsCount;
+            ServicePointManager.Expect100Continue = false;
+            ServicePointManager.UseNagleAlgorithm = false;
             _uri = uri;
             _keepAlive = keepAlive;
+            _protocolVersion = protocolVersion;
             try
             {
-                for (var i = 0; i < connectionsCount; i++)
+                HttpMessageHandler messageHandler;
+#if NETFRAMEWORK
+                var handler = new HttpClientHandler();
+                handler.MaxConnectionsPerServer = connectionsCount;
+                handler.CheckCertificateRevocationList = false;
+                handler.UseCookies = false;
+                handler.UseProxy = false;
+                messageHandler = handler;
+#else
+                var handler = new SocketsHttpHandler();
+                handler.MaxConnectionsPerServer = connectionsCount;
+                handler.UseCookies = false;
+                handler.UseProxy = false;
+
+                messageHandler = handler;
+#endif
+                var globalClient = new HttpClient(messageHandler, false);
+                globalClient.Timeout = TimeSpan.FromMinutes(1);
+                for (var i = 0; i < tasksCount; i++)
                 {
-                    var handler = new HttpClientHandler();
-                    var client = new HttpClient(handler, true);
+                    var client = globalClient;
                     if (!keepAlive)
                     {
                         client.DefaultRequestHeaders.Connection.Add("close");
                     }
 
-                    client.Timeout = TimeSpan.FromMinutes(1);
                     _httpClients.Add(client);
                 }
 
@@ -53,6 +82,8 @@ namespace NHttpBench
                 throw;
             }
         }
+
+        public int ActiveWorkItems => _activeWorkItems;
 
         /// <inheritdoc />
         public void Dispose()
@@ -92,9 +123,17 @@ namespace NHttpBench
             try
             {
                 _workItems[itemIndex].StartInstant = _stopwatch.Elapsed.TotalSeconds;
+                //using var message = new HttpRequestMessage(HttpMethod.Get, _uri)
+                //{
+                //    Version = _protocolVersion,
+                //};
 
-                var bytes = await httpClient.GetByteArrayAsync(_uri).ConfigureAwait(false);
-                _workItems[itemIndex].ContentLength = bytes.Length;
+                //using var responseMessage = await httpClient.SendAsync(message).ConfigureAwait(false);
+                //using var lengthCounterStream = new LengthCounterStream();
+                var data = await httpClient.GetByteArrayAsync(_uri).ConfigureAwait(false);
+                //await responseMessage.Content.CopyToAsync(lengthCounterStream).ConfigureAwait(false);
+                //_workItems[itemIndex].ContentLength = lengthCounterStream.Length;
+                //responseMessage.EnsureSuccessStatusCode();
             }
             catch (Exception ex)
             {
@@ -131,6 +170,7 @@ namespace NHttpBench
                         Task t = null;
                         try
                         {
+                            Interlocked.Increment(ref _activeWorkItems);
                             t = ProcessWorkItem(httpClient, itemIndex);
                         }
                         catch
@@ -150,6 +190,7 @@ namespace NHttpBench
                         // Do nothing.
                     }
 
+                    Interlocked.Decrement(ref _activeWorkItems);
                     Interlocked.Increment(ref _processedItems);
                     if (isYieldRequired)
                     {

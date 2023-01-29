@@ -10,6 +10,6 @@ namespace NHttpBench
         public double StartInstant;
         public double EndInstant;
         public Exception? Exception;
-        public int ContentLength;
+        public long ContentLength;
     }
 }
