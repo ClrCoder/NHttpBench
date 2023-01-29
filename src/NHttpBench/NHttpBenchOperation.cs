@@ -3,6 +3,7 @@
 
 namespace NHttpBench
 {
+    using JetBrains.Annotations;
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -12,7 +13,6 @@ namespace NHttpBench
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
-    using JetBrains.Annotations;
 
     public class NHttpBenchOperation : IDisposable
     {
@@ -123,17 +123,16 @@ namespace NHttpBench
             try
             {
                 _workItems[itemIndex].StartInstant = _stopwatch.Elapsed.TotalSeconds;
-                //using var message = new HttpRequestMessage(HttpMethod.Get, _uri)
-                //{
-                //    Version = _protocolVersion,
-                //};
+                using var message = new HttpRequestMessage(HttpMethod.Get, _uri)
+                {
+                    Version = _protocolVersion,
+                };
 
-                //using var responseMessage = await httpClient.SendAsync(message).ConfigureAwait(false);
-                //using var lengthCounterStream = new LengthCounterStream();
-                var data = await httpClient.GetByteArrayAsync(_uri).ConfigureAwait(false);
-                //await responseMessage.Content.CopyToAsync(lengthCounterStream).ConfigureAwait(false);
-                //_workItems[itemIndex].ContentLength = lengthCounterStream.Length;
-                //responseMessage.EnsureSuccessStatusCode();
+                using var responseMessage = await httpClient.SendAsync(message).ConfigureAwait(false);
+                using var lengthCounterStream = new LengthCounterStream();
+                await responseMessage.Content.CopyToAsync(lengthCounterStream).ConfigureAwait(false);
+                _workItems[itemIndex].ContentLength = lengthCounterStream.Length;
+                responseMessage.EnsureSuccessStatusCode();
             }
             catch (Exception ex)
             {
@@ -194,7 +193,7 @@ namespace NHttpBench
                     Interlocked.Increment(ref _processedItems);
                     if (isYieldRequired)
                     {
-                        //await Task.Yield();
+                        await Task.Yield();
                     }
                 }
             }
